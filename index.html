@@ -1256,7 +1256,7 @@ async function analyseReport(idx){
     if(r.type.startsWith('image/')){
       const base64=r.dataUrl.split(',')[1];
       const mediaType=r.type;
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({
         model:'claude-sonnet-4-20250514',max_tokens:1000,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
@@ -1310,7 +1310,8 @@ function showReportAnalysis(idx){
 // AI — CLAUDE API HELPER
 // ═══════════════════════════════════════════════════════════════════
 async function claudeAPI(prompt,maxTokens=500){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})});
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||'API error '+r.status);}
   const d=await r.json();
   return d.content.map(c=>c.text||'').join('');
 }
@@ -1521,12 +1522,25 @@ function openGmail(email,sub,body){
 // DATA EXPORT / IMPORT
 // ═══════════════════════════════════════════════════════════════════
 function exportData(){
-  const data={nt_profile:profile,nt_logs:logs,nt_activity:acts,nt_reports:reports.map(r=>({...r,dataUrl:'[image data omitted for size]'})),exportedAt:new Date().toISOString(),version:'2.0'};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='nutritrack-backup-'+new Date().toISOString().slice(0,10)+'.json';
-  a.click();URL.revokeObjectURL(url);
-  toast('Data exported ✓');
+  const data={nt_profile:profile,nt_logs:logs,nt_activity:acts,exportedAt:new Date().toISOString(),version:'2.0'};
+  const json=JSON.stringify(data,null,2);
+  // Try download first
+  try{
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;
+    a.download='nutritrack-backup-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Data exported — check Downloads folder ✓');
+  }catch(e){
+    // Fallback: copy to clipboard
+    navigator.clipboard.writeText(json).then(()=>{
+      toast('Data copied to clipboard — paste into a notes app to save','info');
+    }).catch(()=>{
+      toast('Export failed — try on desktop','err');
+    });
+  }
 }
 function importData(file){
   const reader=new FileReader();
@@ -1677,4 +1691,3 @@ renderAll();
 </script>
 </body>
 </html>
-
